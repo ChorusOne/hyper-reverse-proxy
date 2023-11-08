@@ -206,6 +206,7 @@ fn create_proxied_request<B>(
     forward_url: &str,
     mut request: Request<B>,
     upgrade_type: Option<&String>,
+    set_host_header: bool,
 ) -> Result<Request<B>, ProxyError> {
     info!("Creating proxied request");
 
@@ -225,9 +226,11 @@ fn create_proxied_request<B>(
 
     debug!("Setting headers of proxied request");
 
-    request
-        .headers_mut()
-        .insert(HOST, HeaderValue::from_str(uri.host().unwrap())?);
+    if set_host_header {
+        request
+            .headers_mut()
+            .insert(HOST, HeaderValue::from_str(uri.host().unwrap())?);
+    }
 
     *request.uri_mut() = uri;
 
@@ -281,8 +284,18 @@ fn create_proxied_request<B>(
 pub async fn call<'a, T: hyper::client::connect::Connect + Clone + Send + Sync + 'static>(
     client_ip: IpAddr,
     forward_uri: &str,
+    request: Request<Body>,
+    client: &'a Client<T>,
+) -> Result<Response<Body>, ProxyError> {
+    call_extra(client_ip, forward_uri, request, client, true).await
+}
+
+pub async fn call_extra<'a, T: hyper::client::connect::Connect + Clone + Send + Sync + 'static>(
+    client_ip: IpAddr,
+    forward_uri: &str,
     mut request: Request<Body>,
     client: &'a Client<T>,
+    set_host_header: bool,
 ) -> Result<Response<Body>, ProxyError> {
     info!(
         "Received proxy call from {} to {}, client: {}",
@@ -299,6 +312,7 @@ pub async fn call<'a, T: hyper::client::connect::Connect + Clone + Send + Sync +
         forward_uri,
         request,
         request_upgrade_type.as_ref(),
+        set_host_header,
     )?;
     let mut response = client.request(proxied_request).await?;
 
@@ -383,6 +397,6 @@ pub mod benches {
         request: crate::Request<B>,
         upgrade_type: Option<&String>,
     ) {
-        super::create_proxied_request(client_ip, forward_url, request, upgrade_type).unwrap();
+        super::create_proxied_request(client_ip, forward_url, request, upgrade_type, true).unwrap();
     }
 }
